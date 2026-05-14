@@ -11,48 +11,64 @@
 body{background:var(--bg);color:var(--text);font-family:'Syne',sans-serif;min-height:100vh;display:flex;align-items:center;justify-content:center}
 body::before{content:'';position:fixed;inset:0;background:radial-gradient(ellipse 60% 50% at 20% 20%,rgba(0,229,255,.07) 0%,transparent 70%),radial-gradient(ellipse 50% 60% at 80% 80%,rgba(124,58,237,.08) 0%,transparent 70%);pointer-events:none}
 .grid-bg{position:fixed;inset:0;background-image:linear-gradient(rgba(255,255,255,.025) 1px,transparent 1px),linear-gradient(90deg,rgba(255,255,255,.025) 1px,transparent 1px);background-size:48px 48px;pointer-events:none}
-.wrapper{width:100%;max-width:600px;padding:24px;position:relative;z-index:1}
-header{margin-bottom:40px;text-align:center}
-.badge{display:inline-flex;align-items:center;gap:6px;background:rgba(0,229,255,.08);border:1px solid rgba(0,229,255,.2);color:var(--accent);font-family:'JetBrains Mono',monospace;font-size:11px;padding:4px 12px;border-radius:999px;letter-spacing:.08em;margin-bottom:20px}
+.wrapper{width:100%;max-width:620px;padding:24px;position:relative;z-index:1}
+header{margin-bottom:36px;text-align:center}
+.badge{display:inline-flex;align-items:center;gap:6px;background:rgba(0,229,255,.08);border:1px solid rgba(0,229,255,.2);color:var(--accent);font-family:'JetBrains Mono',monospace;font-size:11px;padding:4px 12px;border-radius:999px;letter-spacing:.08em;margin-bottom:18px}
 .badge::before{content:'';width:6px;height:6px;background:var(--accent);border-radius:50%;animation:pulse 2s ease-in-out infinite}
 @keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}
-h1{font-size:clamp(28px,5vw,42px);font-weight:800;line-height:1.1;letter-spacing:-.03em;margin-bottom:10px}
+h1{font-size:clamp(26px,5vw,40px);font-weight:800;line-height:1.1;letter-spacing:-.03em;margin-bottom:8px}
 h1 span{color:var(--accent)}
-.subtitle{color:var(--muted);font-size:14px;font-family:'JetBrains Mono',monospace}
-.card{background:var(--surface);border:1px solid var(--border);border-radius:16px;padding:28px;margin-bottom:16px;position:relative;overflow:hidden}
+.subtitle{color:var(--muted);font-size:13px;font-family:'JetBrains Mono',monospace}
+.card{background:var(--surface);border:1px solid var(--border);border-radius:16px;padding:24px;margin-bottom:14px;position:relative;overflow:hidden}
 .card::before{content:'';position:absolute;top:0;left:0;right:0;height:1px;background:linear-gradient(90deg,transparent,rgba(0,229,255,.3),transparent)}
-.label{font-size:11px;font-family:'JetBrains Mono',monospace;letter-spacing:.1em;color:var(--muted);text-transform:uppercase;margin-bottom:10px}
-.input-row{display:flex;gap:10px;margin-bottom:0}
-input[type=text],input[type=password]{flex:1;background:rgba(255,255,255,.03);border:1px solid var(--border);border-radius:10px;color:var(--text);font-family:'JetBrains Mono',monospace;font-size:13px;padding:12px 16px;outline:none;transition:border-color .2s}
+.label{font-size:11px;font-family:'JetBrains Mono',monospace;letter-spacing:.1em;color:var(--muted);text-transform:uppercase;margin-bottom:8px}
+.url-row{display:flex;gap:10px;margin-bottom:0}
+input[type=text]{flex:1;background:rgba(255,255,255,.03);border:1px solid var(--border);border-radius:10px;color:var(--text);font-family:'JetBrains Mono',monospace;font-size:13px;padding:11px 14px;outline:none;transition:border-color .2s}
 input:focus{border-color:var(--accent);box-shadow:0 0 0 3px rgba(0,229,255,.1)}
 input::placeholder{color:var(--muted);opacity:.6}
-.btn{display:inline-flex;align-items:center;gap:8px;background:var(--accent);color:#000;font-family:'Syne',sans-serif;font-weight:700;font-size:14px;padding:12px 20px;border:none;border-radius:10px;cursor:pointer;transition:all .15s;white-space:nowrap}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;background:var(--accent);color:#000;font-family:'Syne',sans-serif;font-weight:700;font-size:13px;padding:11px 18px;border:none;border-radius:10px;cursor:pointer;transition:all .15s;white-space:nowrap}
 .btn:hover{filter:brightness(1.15);transform:translateY(-1px)}
 .btn:disabled{opacity:.4;cursor:not-allowed;transform:none}
-.btn-full{width:100%;justify-content:center;margin-top:14px}
-.section-title{font-size:13px;font-weight:700;color:var(--text);margin-bottom:14px;display:flex;align-items:center;gap:8px}
+.btn-outline{background:transparent;color:var(--accent);border:1px solid rgba(0,229,255,.3)}
+.btn-outline:hover{background:rgba(0,229,255,.07);border-color:var(--accent)}
+.btn-full{width:100%;margin-top:12px}
+.section-title{font-size:12px;font-weight:700;color:var(--text);margin-bottom:12px;display:flex;align-items:center;gap:8px}
 .section-title::after{content:'';flex:1;height:1px;background:var(--border)}
-.warn-box{background:rgba(245,158,11,.06);border:1px solid rgba(245,158,11,.2);border-radius:10px;padding:14px 16px;font-size:12px;font-family:'JetBrains Mono',monospace;color:rgba(245,158,11,.9);line-height:1.7}
-.log-area{background:#060608;border:1px solid var(--border);border-radius:10px;padding:16px;font-family:'JetBrains Mono',monospace;font-size:12px;line-height:1.8;min-height:100px;max-height:180px;overflow-y:auto}
+.warn-box{background:rgba(245,158,11,.06);border:1px solid rgba(245,158,11,.2);border-radius:10px;padding:12px 14px;font-size:11px;font-family:'JetBrains Mono',monospace;color:rgba(245,158,11,.9);line-height:1.7}
+.log-area{background:#060608;border:1px solid var(--border);border-radius:10px;padding:14px;font-family:'JetBrains Mono',monospace;font-size:11px;line-height:1.8;min-height:90px;max-height:160px;overflow-y:auto}
 .log-line{margin-bottom:2px}
 .log-line.ok{color:var(--success)}.log-line.err{color:var(--error)}.log-line.info{color:var(--accent)}.log-line.muted{color:var(--muted)}.log-line.warn{color:var(--warn)}
-.progress-wrap{margin-top:14px;display:none}
+.progress-wrap{margin-top:12px;display:none}
 .progress-wrap.visible{display:block}
-.progress-label{display:flex;justify-content:space-between;font-size:11px;font-family:'JetBrains Mono',monospace;color:var(--muted);margin-bottom:6px}
+.progress-label{display:flex;justify-content:space-between;font-size:11px;font-family:'JetBrains Mono',monospace;color:var(--muted);margin-bottom:5px}
 .progress-bar{height:4px;background:var(--border);border-radius:999px;overflow:hidden}
 .progress-fill{height:100%;background:linear-gradient(90deg,var(--accent),#7c3aed);border-radius:999px;width:0%;transition:width .3s}
-.result-links{margin-top:14px;display:none}
+.result-links{margin-top:12px;display:none}
 .result-links.visible{display:block}
-.dl-item{display:flex;align-items:center;justify-content:space-between;background:rgba(34,211,160,.06);border:1px solid rgba(34,211,160,.2);border-radius:10px;padding:12px 16px;margin-bottom:8px}
-.dl-item-name{font-family:'JetBrains Mono',monospace;font-size:12px;color:var(--success);flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;margin-right:12px}
-.dl-btn{background:var(--success);color:#000;font-family:'Syne',sans-serif;font-weight:700;font-size:12px;padding:6px 14px;border:none;border-radius:7px;cursor:pointer;text-decoration:none;flex-shrink:0}
-.spinner{width:14px;height:14px;border:2px solid rgba(0,0,0,.3);border-top-color:#000;border-radius:50%;animation:spin .7s linear infinite;display:none}
+.dl-item{display:flex;align-items:center;justify-content:space-between;background:rgba(34,211,160,.06);border:1px solid rgba(34,211,160,.2);border-radius:10px;padding:10px 14px;margin-bottom:8px}
+.dl-item-name{font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--success);flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;margin-right:10px}
+.dl-btn{background:var(--success);color:#000;font-family:'Syne',sans-serif;font-weight:700;font-size:11px;padding:5px 12px;border:none;border-radius:7px;cursor:pointer;text-decoration:none;flex-shrink:0}
+.spinner{width:13px;height:13px;border:2px solid rgba(0,0,0,.3);border-top-color:#000;border-radius:50%;animation:spin .7s linear infinite;display:none}
 .spinner.visible{display:inline-block}
+.spinner-w{width:13px;height:13px;border:2px solid rgba(0,229,255,.2);border-top-color:var(--accent);border-radius:50%;animation:spin .7s linear infinite;display:none}
+.spinner-w.visible{display:inline-block}
 @keyframes spin{to{transform:rotate(360deg)}}
 .log-area::-webkit-scrollbar{width:4px}
 .log-area::-webkit-scrollbar-thumb{background:var(--border);border-radius:2px}
-.platforms{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px}
-.platform{background:rgba(255,255,255,.04);border:1px solid var(--border);border-radius:8px;padding:4px 10px;font-size:11px;font-family:'JetBrains Mono',monospace;color:var(--muted)}
+
+/* Format selector */
+.formats-wrap{margin-top:14px;display:none}
+.formats-wrap.visible{display:block}
+.video-title{font-family:'JetBrains Mono',monospace;font-size:12px;color:var(--accent);margin-bottom:10px;padding:8px 12px;background:rgba(0,229,255,.05);border-radius:8px;border:1px solid rgba(0,229,255,.1)}
+.formats-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:8px;margin-bottom:12px}
+.fmt-btn{background:rgba(255,255,255,.03);border:1px solid var(--border);border-radius:8px;padding:10px 12px;cursor:pointer;transition:all .15s;text-align:left}
+.fmt-btn:hover{border-color:var(--accent);background:rgba(0,229,255,.05)}
+.fmt-btn.selected{border-color:var(--accent);background:rgba(0,229,255,.1)}
+.fmt-res{font-family:'Syne',sans-serif;font-weight:700;font-size:14px;color:var(--text)}
+.fmt-ext{font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--muted);margin-top:2px}
+.fmt-size{font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--success);margin-top:2px}
+.platforms{display:flex;gap:6px;flex-wrap:wrap;margin-top:10px}
+.platform{background:rgba(255,255,255,.04);border:1px solid var(--border);border-radius:7px;padding:3px 8px;font-size:10px;font-family:'JetBrains Mono',monospace;color:var(--muted)}
 </style>
 </head>
 <body>
@@ -61,58 +77,158 @@ input::placeholder{color:var(--muted);opacity:.6}
   <header>
     <div class="badge">VIDEO DOWNLOADER</div>
     <h1>Вставьте ссылку<br>и <span>скачайте видео</span></h1>
-    <p class="subtitle">// просто вставьте ссылку — больше ничего</p>
+    <p class="subtitle">// Zoom · YouTube · GetCourse · Vimeo · и другие</p>
   </header>
+
   <div class="card">
     <div class="label">Ссылка на видео</div>
-    <div class="input-row">
-      <input type="text" id="urlInput" placeholder="https://zoom.us/rec/... или youtube.com/watch?v=..."/>
+    <div class="url-row">
+      <input type="text" id="urlInput" placeholder="https://youtube.com/watch?v=... или zoom.us/rec/..."/>
+      <button class="btn btn-outline" onclick="getFormats()" id="fetchBtn">
+        <span class="spinner-w" id="fetchSpinner"></span>
+        <span id="fetchBtnText">Форматы</span>
+      </button>
     </div>
     <div class="platforms">
-      <span class="platform">Zoom</span>
       <span class="platform">YouTube</span>
+      <span class="platform">Zoom</span>
       <span class="platform">GetCourse</span>
       <span class="platform">Vimeo</span>
       <span class="platform">и другие</span>
     </div>
+
+    <!-- Форматы -->
+    <div class="formats-wrap" id="formatsWrap">
+      <div class="video-title" id="videoTitle"></div>
+      <div class="label" style="margin-top:4px">Выберите формат</div>
+      <div class="formats-grid" id="formatsGrid"></div>
+    </div>
+
     <button class="btn btn-full" onclick="startDownload()" id="dlBtn">
       <span class="spinner" id="spinner"></span>
       <span id="dlBtnText">⬇ Скачать</span>
     </button>
+
     <div class="progress-wrap" id="progressWrap">
       <div class="progress-label"><span id="progressLabel">Подготовка...</span><span id="progressPct">0%</span></div>
       <div class="progress-bar"><div class="progress-fill" id="progressFill"></div></div>
     </div>
     <div class="result-links" id="resultLinks"></div>
   </div>
+
   <div class="card">
     <div class="section-title">Лог</div>
     <div class="log-area" id="logArea"><div class="log-line muted">// Ожидание запроса...</div></div>
   </div>
+
   <div class="card">
     <div class="warn-box">⚠ Скачивайте только тот контент, на который у вас есть права.</div>
   </div>
 </div>
+
 <script>
-let taskId=null,pollInterval=null;
-function log(msg,type='muted'){const area=document.getElementById('logArea');const line=document.createElement('div');line.className=`log-line ${type}`;const ts=new Date().toLocaleTimeString('ru-RU');line.textContent=`[${ts}] ${msg}`;area.appendChild(line);area.scrollTop=area.scrollHeight}
-function setProgress(pct,label){document.getElementById('progressWrap').classList.add('visible');document.getElementById('progressFill').style.width=pct+'%';document.getElementById('progressPct').textContent=pct+'%';document.getElementById('progressLabel').textContent=label}
-function setLoading(val){document.getElementById('spinner').classList.toggle('visible',val);document.getElementById('dlBtnText').textContent=val?'Загрузка...':'⬇ Скачать';document.getElementById('dlBtn').disabled=val}
+let taskId=null, pollInterval=null, selectedFormat=null;
+
+function log(msg,type='muted'){
+  const area=document.getElementById('logArea');
+  const line=document.createElement('div');
+  line.className=`log-line ${type}`;
+  const ts=new Date().toLocaleTimeString('ru-RU');
+  line.textContent=`[${ts}] ${msg}`;
+  area.appendChild(line);
+  area.scrollTop=area.scrollHeight;
+}
+
+function setProgress(pct,label){
+  document.getElementById('progressWrap').classList.add('visible');
+  document.getElementById('progressFill').style.width=pct+'%';
+  document.getElementById('progressPct').textContent=pct+'%';
+  document.getElementById('progressLabel').textContent=label;
+}
+
+function setLoading(val){
+  document.getElementById('spinner').classList.toggle('visible',val);
+  document.getElementById('dlBtnText').textContent=val?'Загрузка...':'⬇ Скачать';
+  document.getElementById('dlBtn').disabled=val;
+}
+
+async function getFormats(){
+  const url=document.getElementById('urlInput').value.trim();
+  if(!url){log('⚠ Введите ссылку','warn');return}
+
+  const btn=document.getElementById('fetchBtn');
+  const sp=document.getElementById('fetchSpinner');
+  const bt=document.getElementById('fetchBtnText');
+  btn.disabled=true; sp.classList.add('visible'); bt.textContent='Загрузка...';
+  log('Получение форматов...','info');
+
+  try{
+    const res=await fetch('/api/formats',{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({url})
+    });
+    const data=await res.json();
+    if(data.error){log(`✗ ${data.error}`,'err');return}
+
+    document.getElementById('videoTitle').textContent='🎬 '+data.title;
+    const grid=document.getElementById('formatsGrid');
+    grid.innerHTML='';
+    selectedFormat=null;
+
+    data.formats.forEach(f=>{
+      const div=document.createElement('div');
+      div.className='fmt-btn';
+      div.innerHTML=`<div class="fmt-res">${f.label.split(' ')[0]}</div><div class="fmt-ext">${f.ext.toUpperCase()}</div>`;
+      div.onclick=()=>{
+        document.querySelectorAll('.fmt-btn').forEach(b=>b.classList.remove('selected'));
+        div.classList.add('selected');
+        selectedFormat=f.id;
+        log(`Выбран формат: ${f.label}`,'ok');
+      };
+      grid.appendChild(div);
+    });
+
+    // Авто-выбор первого
+    if(data.formats.length>0){
+      grid.firstChild.classList.add('selected');
+      selectedFormat=data.formats[0].id;
+      log(`Найдено ${data.formats.length} форматов. Выбран: ${data.formats[0].label}`,'ok');
+    }
+
+    document.getElementById('formatsWrap').classList.add('visible');
+  }catch(e){
+    log(`Ошибка: ${e.message}`,'err');
+  }finally{
+    btn.disabled=false; sp.classList.remove('visible'); bt.textContent='Форматы';
+  }
+}
+
 async function startDownload(){
   const url=document.getElementById('urlInput').value.trim();
   if(!url){log('⚠ Введите ссылку','warn');return}
+
   document.getElementById('resultLinks').classList.remove('visible');
   document.getElementById('resultLinks').innerHTML='';
   setLoading(true);setProgress(5,'Подключение...');log('Отправка запроса...','info');
-  const fd=new FormData();
-  fd.append('url',url);
+
   try{
-    const res=await fetch('/api/download',{method:'POST',body:fd});
+    const res=await fetch('/api/download',{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({url, format_id: selectedFormat||''})
+    });
     if(!res.ok){const err=await res.json().catch(()=>({}));throw new Error(err.error||`HTTP ${res.status}`)}
-    const data=await res.json();taskId=data.task_id;
+    const data=await res.json();
+    taskId=data.task_id;
     log('Задача создана','ok');setProgress(15,'Получение информации...');pollStatus();
-  }catch(e){log(`Ошибка: ${e.message}`,'err');setLoading(false);document.getElementById('progressWrap').classList.remove('visible')}
+  }catch(e){
+    log(`Ошибка: ${e.message}`,'err');
+    setLoading(false);
+    document.getElementById('progressWrap').classList.remove('visible');
+  }
 }
+
 function pollStatus(){
   if(pollInterval)clearInterval(pollInterval);
   pollInterval=setInterval(async()=>{
@@ -121,18 +237,35 @@ function pollStatus(){
       const data=await res.json();
       if(data.log_line)log(data.log_line,'muted');
       if(data.progress!==undefined)setProgress(data.progress,data.stage||'Скачивание...');
-      if(data.status==='done'){clearInterval(pollInterval);setLoading(false);setProgress(100,'Готово!');log('✓ Скачивание завершено!','ok');showResults(data.files)}
-      else if(data.status==='error'){clearInterval(pollInterval);setLoading(false);log(`✗ ${data.error}`,'err');document.getElementById('progressWrap').classList.remove('visible')}
+      if(data.status==='done'){
+        clearInterval(pollInterval);setLoading(false);setProgress(100,'Готово!');
+        log('✓ Скачивание завершено!','ok');showResults(data.files);
+      } else if(data.status==='error'){
+        clearInterval(pollInterval);setLoading(false);
+        log(`✗ ${data.error}`,'err');
+        document.getElementById('progressWrap').classList.remove('visible');
+      }
     }catch(e){log('Потеря связи...','warn')}
   },1200);
 }
+
 function showResults(files){
-  const wrap=document.getElementById('resultLinks');wrap.innerHTML='';
+  const wrap=document.getElementById('resultLinks');
+  wrap.innerHTML='';
   if(!files||!files.length)return;
-  files.forEach(f=>{const item=document.createElement('div');item.className='dl-item';item.innerHTML=`<div class="dl-item-name">📄 ${f.name}</div><a class="dl-btn" href="/api/file/${f.id}" download="${f.name}">Скачать</a>`;wrap.appendChild(item)});
+  files.forEach(f=>{
+    const item=document.createElement('div');
+    item.className='dl-item';
+    item.innerHTML=`<div class="dl-item-name">📄 ${f.name}</div><a class="dl-btn" href="/api/file/${f.id}" download="${f.name}">Скачать</a>`;
+    wrap.appendChild(item);
+  });
   wrap.classList.add('visible');
 }
-document.getElementById('urlInput').addEventListener('keydown',e=>{if(e.key==='Enter')startDownload()});
+
+document.getElementById('urlInput').addEventListener('keydown',e=>{
+  if(e.key==='Enter') getFormats();
+});
+
 log('Готово к работе.','info');
 </script>
 </body>

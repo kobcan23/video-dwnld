@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 import os, uuid, threading
 from pathlib import Path
-from flask import Flask, request, jsonify, send_file, abort
+from flask import Flask, request, jsonify, send_file
 from flask_cors import CORS
 import yt_dlp
 
@@ -23,14 +23,17 @@ def get_global_cookies():
         return str(COOKIES_FILE)
     return None
 
-def do_download(task_id, url, password):
+def do_download(task_id, url, password, format_id=None):
     task = tasks[task_id]
     task.update({'status':'running','progress':20,'stage':'Получение информации...','log_line':f'Обработка: {url}'})
     out_dir = DOWNLOAD_DIR / task_id
     out_dir.mkdir(exist_ok=True)
+
+    fmt = format_id if format_id else 'bestvideo+bestaudio/best'
+
     ydl_opts = {
         'outtmpl': str(out_dir / '%(title)s.%(ext)s'),
-        'format': 'best[ext=mp4]/best',
+        'format': fmt,
         'merge_output_format': 'mp4',
         'quiet': True,
         'no_warnings': True,
@@ -76,6 +79,85 @@ def index():
 def admin():
     return send_file(Path(__file__).parent / 'admin.html')
 
+@app.route('/api/formats', methods=['POST'])
+def get_formats():
+    url = (request.json.get('url') or '').strip()
+    if not url:
+        return jsonify({'error': 'URL обязателен'}), 400
+
+    ydl_opts = {
+        'quiet': True,
+        'no_warnings': True,
+        'skip_download': True,
+    }
+    cookies = get_global_cookies()
+    if cookies:
+        ydl_opts['cookiefile'] = cookies
+
+    try:
+        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+            info = ydl.extract_info(url, download=False)
+            title = info.get('title', 'Без названия')
+            formats_raw = info.get('formats', [])
+
+            formats = []
+            seen = set()
+
+            # Собираем комбинированные форматы (видео+аудио)
+            for f in formats_raw:
+                vcodec = f.get('vcodec', 'none')
+                acodec = f.get('acodec', 'none')
+                ext = f.get('ext', '')
+                fid = f.get('format_id', '')
+                height = f.get('height')
+                filesize = f.get('filesize') or f.get('filesize_approx')
+
+                if vcodec == 'none' or acodec == 'none':
+                    continue  # пропускаем раздельные потоки
+
+                label = f"{height}p" if height else ext.upper()
+                size_str = f" (~{round(filesize/1024/1024)}MB)" if filesize else ""
+                key = f"{height}-{ext}"
+                if key in seen:
+                    continue
+                seen.add(key)
+
+                formats.append({
+                    'id': fid,
+                    'label': f"{label} {ext.upper()}{size_str}",
+                    'height': height or 0,
+                    'ext': ext,
+                })
+
+            # Если нет комбинированных — берём лучшие
+            if not formats:
+                for f in formats_raw:
+                    ext = f.get('ext', '')
+                    fid = f.get('format_id', '')
+                    height = f.get('height')
+                    filesize = f.get('filesize') or f.get('filesize_approx')
+                    if not fid:
+                        continue
+                    label = f"{height}p" if height else ext.upper()
+                    size_str = f" (~{round(filesize/1024/1024)}MB)" if filesize else ""
+                    key = f"{height}-{ext}"
+                    if key in seen:
+                        continue
+                    seen.add(key)
+                    formats.append({
+                        'id': fid,
+                        'label': f"{label} {ext.upper()}{size_str}",
+                        'height': height or 0,
+                        'ext': ext,
+                    })
+
+            # Сортируем по качеству
+            formats.sort(key=lambda x: x['height'], reverse=True)
+
+            return jsonify({'title': title, 'formats': formats[:15]})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
 @app.route('/api/admin/upload-cookies', methods=['POST'])
 def upload_cookies():
     password = request.form.get('password', '')
@@ -104,18 +186,19 @@ def cookies_status():
 
 @app.route('/api/download', methods=['POST'])
 def start_download():
-    url = (request.form.get('url') or request.json.get('url') if request.is_json else request.form.get('url') or '').strip()
     if request.is_json:
         url = (request.json.get('url') or '').strip()
         password = (request.json.get('password') or '').strip()
+        format_id = (request.json.get('format_id') or '').strip()
     else:
         url = (request.form.get('url') or '').strip()
         password = (request.form.get('password') or '').strip()
+        format_id = (request.form.get('format_id') or '').strip()
     if not url:
         return jsonify({'error':'URL обязателен'}), 400
     task_id = str(uuid.uuid4())
     tasks[task_id] = {'status':'pending','progress':10,'stage':'Запуск...','file_map':{}}
-    threading.Thread(target=do_download, args=(task_id, url, password), daemon=True).start()
+    threading.Thread(target=do_download, args=(task_id, url, password, format_id or None), daemon=True).start()
     return jsonify({'task_id':task_id})
 
 @app.route('/api/status/<task_id>')
