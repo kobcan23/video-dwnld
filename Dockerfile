@@ -12,6 +12,7 @@ COPY admin.html .
 
 RUN mkdir -p downloads cookies
 
+# Railway сам пробрасывает свой $PORT в контейнер; EXPOSE-значение не критично.
 EXPOSE 5000
 
-CMD ["python3", "server.py"]
+CMD ["python3", "-u", "server.py"]

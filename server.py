@@ -211,5 +211,8 @@ def serve_file(file_id):
     return jsonify({'error':'Не найден'}), 404
 
 if __name__ == '__main__':
-    print("Downloader: http://0.0.0.0:5000")
-    app.run(host='0.0.0.0', port=5000, debug=False)
+    # Railway/Heroku/Render передают порт через переменную окружения PORT.
+    # Локально (без PORT) слушаем 5000 — чтобы можно было запускать `python server.py`.
+    port = int(os.environ.get('PORT', 5000))
+    print(f"Downloader: http://0.0.0.0:{port}")
+    app.run(host='0.0.0.0', port=port, debug=False)
