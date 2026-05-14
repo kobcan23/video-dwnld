@@ -104,10 +104,15 @@ input::placeholder{color:var(--muted);opacity:.6}
       <div class="formats-grid" id="formatsGrid"></div>
     </div>
 
-    <button class="btn btn-full" onclick="startDownload()" id="dlBtn">
-      <span class="spinner" id="spinner"></span>
-      <span id="dlBtnText">⬇ Скачать</span>
-    </button>
+    <div style="display:flex;gap:10px;margin-top:12px">
+      <button class="btn" onclick="startDownload()" id="dlBtn" style="flex:1">
+        <span class="spinner" id="spinner"></span>
+        <span id="dlBtnText">⬇ Скачать</span>
+      </button>
+      <button class="btn" onclick="cancelDownload()" id="cancelBtn" style="background:#ff4d6d;display:none">
+        ✕ Стоп
+      </button>
+    </div>
 
     <div class="progress-wrap" id="progressWrap">
       <div class="progress-label"><span id="progressLabel">Подготовка...</span><span id="progressPct">0%</span></div>
@@ -150,6 +155,7 @@ function setLoading(val){
   document.getElementById('spinner').classList.toggle('visible',val);
   document.getElementById('dlBtnText').textContent=val?'Загрузка...':'⬇ Скачать';
   document.getElementById('dlBtn').disabled=val;
+  document.getElementById('cancelBtn').style.display=val?'inline-flex':'none';
 }
 
 async function getFormats(){
@@ -262,9 +268,32 @@ function showResults(files){
   wrap.classList.add('visible');
 }
 
-document.getElementById('urlInput').addEventListener('keydown',e=>{
-  if(e.key==='Enter') getFormats();
+document.getElementById('urlInput').addEventListener('keydown',async e=>{
+  if(e.key==='Enter'){
+    await getFormats();
+    // Выбираем наименьший формат (последний в отсортированном списке)
+    const btns = document.querySelectorAll('.fmt-btn');
+    if(btns.length > 0){
+      document.querySelectorAll('.fmt-btn').forEach(b=>b.classList.remove('selected'));
+      const last = btns[btns.length-1];
+      last.classList.add('selected');
+      last.click();
+    }
+    startDownload();
+  }
 });
+
+async function cancelDownload(){
+  if(!taskId) return;
+  try{
+    await fetch(`/api/cancel/${taskId}`,{method:'POST'});
+    log('Скачивание отменено','warn');
+  }catch(e){}
+  if(pollInterval) clearInterval(pollInterval);
+  setLoading(false);
+  document.getElementById('cancelBtn').style.display='none';
+  document.getElementById('progressWrap').classList.remove('visible');
+}
 
 log('Готово к работе.','info');
 </script>

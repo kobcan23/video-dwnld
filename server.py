@@ -49,7 +49,9 @@ def do_download(task_id, url, password, format_id=None):
             info = ydl.extract_info(url, download=False)
             task['log_line'] = f'Найдено: {info.get("title","Без названия")}'
             task.update({'progress':30,'stage':'Скачивание...'})
-            ydl.download([url])
+            if task.get('cancelled'):
+            raise Exception('Отменено пользователем')
+        ydl.download([url])
         files = []
         for f in out_dir.iterdir():
             if f.is_file():
@@ -103,7 +105,6 @@ def get_formats():
             formats = []
             seen = set()
 
-            # Собираем комбинированные форматы (видео+аудио)
             for f in formats_raw:
                 vcodec = f.get('vcodec', 'none')
                 acodec = f.get('acodec', 'none')
@@ -111,45 +112,30 @@ def get_formats():
                 fid = f.get('format_id', '')
                 height = f.get('height')
                 filesize = f.get('filesize') or f.get('filesize_approx')
-
-                if vcodec == 'none' or acodec == 'none':
-                    continue  # пропускаем раздельные потоки
-
-                label = f"{height}p" if height else ext.upper()
-                size_str = f" (~{round(filesize/1024/1024)}MB)" if filesize else ""
-                key = f"{height}-{ext}"
+                if not fid:
+                    continue
+                has_video = vcodec and vcodec != 'none'
+                has_audio = acodec and acodec != 'none'
+                if not has_video and not has_audio:
+                    continue
+                if has_video and has_audio:
+                    type_label = ''
+                elif has_video:
+                    type_label = ' (видео)'
+                else:
+                    type_label = ' (аудио)'
+                res = f"{height}p" if height else ext.upper()
+                size_str = f" ~{round(filesize/1024/1024)}MB" if filesize else ""
+                key = f"{height}-{ext}-{type_label}"
                 if key in seen:
                     continue
                 seen.add(key)
-
                 formats.append({
                     'id': fid,
-                    'label': f"{label} {ext.upper()}{size_str}",
+                    'label': f"{res} {ext.upper()}{type_label}{size_str}",
                     'height': height or 0,
                     'ext': ext,
                 })
-
-            # Если нет комбинированных — берём лучшие
-            if not formats:
-                for f in formats_raw:
-                    ext = f.get('ext', '')
-                    fid = f.get('format_id', '')
-                    height = f.get('height')
-                    filesize = f.get('filesize') or f.get('filesize_approx')
-                    if not fid:
-                        continue
-                    label = f"{height}p" if height else ext.upper()
-                    size_str = f" (~{round(filesize/1024/1024)}MB)" if filesize else ""
-                    key = f"{height}-{ext}"
-                    if key in seen:
-                        continue
-                    seen.add(key)
-                    formats.append({
-                        'id': fid,
-                        'label': f"{label} {ext.upper()}{size_str}",
-                        'height': height or 0,
-                        'ext': ext,
-                    })
 
             # Сортируем по качеству
             formats.sort(key=lambda x: x['height'], reverse=True)
@@ -206,6 +192,16 @@ def get_status(task_id):
     task = tasks.get(task_id)
     if not task: return jsonify({'error':'Не найдено'}), 404
     return jsonify({'status':task.get('status'),'progress':task.get('progress',0),'stage':task.get('stage',''),'log_line':task.get('log_line',''),'error':task.get('error',''),'files':task.get('files',[])})
+
+@app.route('/api/cancel/<task_id>', methods=['POST'])
+def cancel_task(task_id):
+    task = tasks.get(task_id)
+    if not task:
+        return jsonify({'error': 'Не найдено'}), 404
+    task['cancelled'] = True
+    task['status'] = 'error'
+    task['error'] = 'Отменено пользователем'
+    return jsonify({'success': True})
 
 @app.route('/api/file/<file_id>')
 def serve_file(file_id):
