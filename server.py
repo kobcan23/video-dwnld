@@ -16,6 +16,21 @@ COOKIES_DIR.mkdir(exist_ok=True)
 ADMIN_PASSWORD = os.environ.get("ADMIN_PASSWORD", "admin123")
 COOKIES_FILE = COOKIES_DIR / "global_cookies.txt"
 
+# При старте: если задана переменная окружения YOUTUBE_COOKIES — пишем её
+# содержимое в файл с куками. Это решает проблему "куки теряются при
+# перезапуске контейнера" на бесплатных хостингах (Render, Railway), где
+# нет постоянной файловой системы. Куки переживают рестарты, пока
+# переменная задана.
+_env_cookies = os.environ.get("YOUTUBE_COOKIES", "").strip()
+if _env_cookies:
+    try:
+        # Поддержка \n как разделителя строк (если задали одной строкой)
+        content = _env_cookies.replace("\\n", "\n")
+        COOKIES_FILE.write_text(content, encoding="utf-8")
+        print(f"[init] cookies восстановлены из YOUTUBE_COOKIES ({len(content)} bytes)")
+    except Exception as e:
+        print(f"[init] не удалось записать куки из env: {e}")
+
 tasks = {}
 
 def get_global_cookies():
