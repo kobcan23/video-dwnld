@@ -8,6 +8,7 @@ RUN pip install flask flask-cors yt-dlp --no-cache-dir
 
 COPY server.py .
 COPY zoom-downloader.html .
+COPY admin.html .
 
 RUN mkdir -p downloads cookies
 
