@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Админ — Video Downloader</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&family=Syne:wght@400;700;800&display=swap');
+:root{--bg:#0a0a0f;--surface:#111118;--border:#1e1e2e;--accent:#7c3aed;--text:#e2e8f0;--muted:#64748b;--success:#22d3a0;--error:#ff4d6d}
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:var(--bg);color:var(--text);font-family:'Syne',sans-serif;min-height:100vh;display:flex;align-items:center;justify-content:center}
+.wrapper{width:100%;max-width:500px;padding:24px;z-index:1}
+h1{font-size:28px;font-weight:800;margin-bottom:6px}
+h1 span{color:var(--accent)}
+.sub{color:var(--muted);font-size:13px;font-family:'JetBrains Mono',monospace;margin-bottom:32px}
+.card{background:var(--surface);border:1px solid var(--border);border-radius:16px;padding:28px;margin-bottom:16px}
+.label{font-size:11px;font-family:'JetBrains Mono',monospace;letter-spacing:.1em;color:var(--muted);text-transform:uppercase;margin-bottom:10px}
+input[type=password],input[type=text]{width:100%;background:rgba(255,255,255,.03);border:1px solid var(--border);border-radius:10px;color:var(--text);font-family:'JetBrains Mono',monospace;font-size:13px;padding:12px 16px;outline:none;margin-bottom:14px}
+input:focus{border-color:var(--accent);box-shadow:0 0 0 3px rgba(124,58,237,.15)}
+input::placeholder{color:var(--muted);opacity:.6}
+.cookie-drop{display:flex;align-items:center;gap:12px;background:rgba(255,255,255,.03);border:1px dashed var(--border);border-radius:10px;padding:16px;cursor:pointer;transition:border-color .2s;margin-bottom:14px}
+.cookie-drop:hover{border-color:var(--accent)}
+.cookie-drop input{display:none;margin:0}
+.cookie-text{font-family:'JetBrains Mono',monospace;font-size:12px;color:var(--muted);flex:1}
+.cookie-text.active{color:var(--success)}
+.btn{width:100%;display:flex;align-items:center;justify-content:center;gap:8px;background:var(--accent);color:#fff;font-family:'Syne',sans-serif;font-weight:700;font-size:14px;padding:12px 20px;border:none;border-radius:10px;cursor:pointer;transition:all .15s}
+.btn:hover{filter:brightness(1.15)}
+.btn:disabled{opacity:.4;cursor:not-allowed}
+.status{margin-top:16px;padding:14px 16px;border-radius:10px;font-family:'JetBrains Mono',monospace;font-size:12px;display:none}
+.status.ok{background:rgba(34,211,160,.08);border:1px solid rgba(34,211,160,.2);color:var(--success)}
+.status.err{background:rgba(255,77,109,.08);border:1px solid rgba(255,77,109,.2);color:var(--error)}
+.status.visible{display:block}
+.info-box{background:rgba(124,58,237,.06);border:1px solid rgba(124,58,237,.2);border-radius:10px;padding:14px 16px;font-size:12px;font-family:'JetBrains Mono',monospace;color:rgba(124,58,237,.9);line-height:1.7;margin-bottom:14px}
+.cookies-status{background:rgba(255,255,255,.03);border:1px solid var(--border);border-radius:10px;padding:14px 16px;font-family:'JetBrains Mono',monospace;font-size:12px;color:var(--muted);margin-bottom:14px}
+</style>
+</head>
+<body>
+<div class="wrapper">
+  <h1>Админ <span>панель</span></h1>
+  <p class="sub">// управление куками для скачивания</p>
+
+  <div class="card">
+    <div class="info-box">
+      Загрузите куки один раз — все пользователи смогут скачивать без авторизации.<br><br>
+      Как получить куки:<br>
+      1. Установите <strong>Get cookies.txt LOCALLY</strong> в Chrome<br>
+      2. Войдите на нужный сайт (YouTube, GetCourse и др.)<br>
+      3. Нажмите иконку расширения → Export<br>
+      4. Загрузите файл сюда
+    </div>
+
+    <div class="cookies-status" id="cookiesStatus">🔄 Проверка статуса куки...</div>
+
+    <div class="label">Пароль администратора</div>
+    <input type="password" id="adminPass" placeholder="Введите пароль"/>
+
+    <div class="label">Файл cookies.txt</div>
+    <label class="cookie-drop">
+      <input type="file" id="cookieFile" accept=".txt">
+      <span style="font-size:18px">🍪</span>
+      <span class="cookie-text" id="cookieText">Нажмите чтобы выбрать cookies.txt</span>
+    </label>
+
+    <button class="btn" onclick="uploadCookies()" id="uploadBtn">⬆ Загрузить куки</button>
+    <div class="status" id="statusBox"></div>
+  </div>
+
+  <div style="text-align:center;margin-top:16px">
+    <a href="/" style="color:var(--muted);font-family:'JetBrains Mono',monospace;font-size:12px;text-decoration:none">← Вернуться к загрузчику</a>
+  </div>
+</div>
+<script>
+document.getElementById('cookieFile').addEventListener('change',function(){
+  const txt=document.getElementById('cookieText');
+  if(this.files[0]){txt.textContent='✓ '+this.files[0].name;txt.classList.add('active')}
+  else{txt.textContent='Нажмите чтобы выбрать cookies.txt';txt.classList.remove('active')}
+});
+
+async function checkStatus(){
+  const pass=document.getElementById('adminPass').value;
+  if(!pass)return;
+  try{
+    const res=await fetch(`/api/admin/cookies-status?password=${encodeURIComponent(pass)}`);
+    const data=await res.json();
+    const el=document.getElementById('cookiesStatus');
+    if(data.exists){
+      el.style.color='var(--success)';
+      el.textContent=`✓ Куки загружены (${data.updated}, ${Math.round(data.size/1024)} KB)`;
+    } else {
+      el.style.color='var(--warn)';
+      el.textContent='⚠ Куки не загружены';
+    }
+  }catch(e){}
+}
+
+async function uploadCookies(){
+  const pass=document.getElementById('adminPass').value;
+  const file=document.getElementById('cookieFile').files[0];
+  const btn=document.getElementById('uploadBtn');
+  const status=document.getElementById('statusBox');
+
+  if(!pass){showStatus('Введите пароль','err');return}
+  if(!file){showStatus('Выберите файл','err');return}
+
+  btn.disabled=true;btn.textContent='Загружаю...';
+  const fd=new FormData();
+  fd.append('password',pass);
+  fd.append('cookies',file);
+
+  try{
+    const res=await fetch('/api/admin/upload-cookies',{method:'POST',body:fd});
+    const data=await res.json();
+    if(data.success){
+      showStatus('✓ Куки успешно загружены! Теперь все пользователи могут скачивать без авторизации.','ok');
+      checkStatus();
+    } else {
+      showStatus(`✗ Ошибка: ${data.error}`,'err');
+    }
+  }catch(e){
+    showStatus(`✗ Ошибка: ${e.message}`,'err');
+  }
+  btn.disabled=false;btn.textContent='⬆ Загрузить куки';
+}
+
+function showStatus(msg,type){
+  const el=document.getElementById('statusBox');
+  el.textContent=msg;
+  el.className=`status ${type} visible`;
+}
+
+document.getElementById('adminPass').addEventListener('blur',checkStatus);
+</script>
+</body>
+</html>

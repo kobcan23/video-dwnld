@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 import os, uuid, threading
 from pathlib import Path
-from flask import Flask, request, jsonify, send_file
+from flask import Flask, request, jsonify, send_file, abort
 from flask_cors import CORS
 import yt_dlp
 
@@ -12,9 +12,18 @@ DOWNLOAD_DIR = Path(__file__).parent / "downloads"
 DOWNLOAD_DIR.mkdir(exist_ok=True)
 COOKIES_DIR = Path(__file__).parent / "cookies"
 COOKIES_DIR.mkdir(exist_ok=True)
+
+ADMIN_PASSWORD = os.environ.get("ADMIN_PASSWORD", "admin123")
+COOKIES_FILE = COOKIES_DIR / "global_cookies.txt"
+
 tasks = {}
 
-def do_download(task_id, url, password, cookies_file=None):
+def get_global_cookies():
+    if COOKIES_FILE.exists():
+        return str(COOKIES_FILE)
+    return None
+
+def do_download(task_id, url, password):
     task = tasks[task_id]
     task.update({'status':'running','progress':20,'stage':'Получение информации...','log_line':f'Обработка: {url}'})
     out_dir = DOWNLOAD_DIR / task_id
@@ -29,9 +38,9 @@ def do_download(task_id, url, password, cookies_file=None):
     }
     if password:
         ydl_opts['videopassword'] = password
-    if cookies_file and Path(cookies_file).exists():
-        ydl_opts['cookiefile'] = cookies_file
-        task['log_line'] = 'Используются куки для авторизации'
+    cookies = get_global_cookies()
+    if cookies:
+        ydl_opts['cookiefile'] = cookies
     try:
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             info = ydl.extract_info(url, download=False)
@@ -47,10 +56,6 @@ def do_download(task_id, url, password, cookies_file=None):
         task.update({'status':'done','progress':100,'stage':'Готово!','files':files,'log_line':f'Скачано: {len(files)} файл(ов)'})
     except Exception as e:
         task.update({'status':'error','error':str(e),'log_line':f'Ошибка: {e}'})
-    finally:
-        if cookies_file and Path(cookies_file).exists():
-            try: os.remove(cookies_file)
-            except: pass
 
 def progress_hook(task_id, d):
     task = tasks.get(task_id)
@@ -67,22 +72,50 @@ def progress_hook(task_id, d):
 def index():
     return send_file(Path(__file__).parent / 'zoom-downloader.html')
 
+@app.route('/admin')
+def admin():
+    return send_file(Path(__file__).parent / 'admin.html')
+
+@app.route('/api/admin/upload-cookies', methods=['POST'])
+def upload_cookies():
+    password = request.form.get('password', '')
+    if password != ADMIN_PASSWORD:
+        return jsonify({'error': 'Неверный пароль'}), 403
+    if 'cookies' not in request.files:
+        return jsonify({'error': 'Файл не найден'}), 400
+    f = request.files['cookies']
+    if not f.filename:
+        return jsonify({'error': 'Файл пустой'}), 400
+    f.save(str(COOKIES_FILE))
+    return jsonify({'success': True, 'message': 'Куки загружены!'})
+
+@app.route('/api/admin/cookies-status')
+def cookies_status():
+    password = request.args.get('password', '')
+    if password != ADMIN_PASSWORD:
+        return jsonify({'error': 'Неверный пароль'}), 403
+    if COOKIES_FILE.exists():
+        size = COOKIES_FILE.stat().st_size
+        mtime = COOKIES_FILE.stat().st_mtime
+        import datetime
+        dt = datetime.datetime.fromtimestamp(mtime).strftime('%d.%m.%Y %H:%M')
+        return jsonify({'exists': True, 'size': size, 'updated': dt})
+    return jsonify({'exists': False})
+
 @app.route('/api/download', methods=['POST'])
 def start_download():
-    url = (request.form.get('url') or '').strip()
-    password = (request.form.get('password') or '').strip()
-    cookies_file = None
+    url = (request.form.get('url') or request.json.get('url') if request.is_json else request.form.get('url') or '').strip()
+    if request.is_json:
+        url = (request.json.get('url') or '').strip()
+        password = (request.json.get('password') or '').strip()
+    else:
+        url = (request.form.get('url') or '').strip()
+        password = (request.form.get('password') or '').strip()
     if not url:
         return jsonify({'error':'URL обязателен'}), 400
-    if 'cookies' in request.files:
-        f = request.files['cookies']
-        if f.filename:
-            cookies_path = str(COOKIES_DIR / f'{uuid.uuid4()}.txt')
-            f.save(cookies_path)
-            cookies_file = cookies_path
     task_id = str(uuid.uuid4())
     tasks[task_id] = {'status':'pending','progress':10,'stage':'Запуск...','file_map':{}}
-    threading.Thread(target=do_download, args=(task_id, url, password, cookies_file), daemon=True).start()
+    threading.Thread(target=do_download, args=(task_id, url, password), daemon=True).start()
     return jsonify({'task_id':task_id})
 
 @app.route('/api/status/<task_id>')
