@@ -33,6 +33,39 @@ if _env_cookies:
 
 tasks = {}
 
+# Общие опции yt-dlp, помогающие обходить "Sign in to confirm you're not a bot":
+#   — deno как JS runtime (иначе часть экстракторов отключена)
+#   — различные player clients (web,mweb,tv выживают в разных ситуациях)
+#   — user-agent обычного браузера
+COMMON_YDL_OPTS = {
+    'quiet': True,
+    'no_warnings': True,
+    'js_runtimes': {'deno': {'path': 'deno'}},
+    'extractor_args': {
+        'youtube': {
+            'player_client': ['default', 'web', 'mweb', 'tv'],
+        },
+    },
+    'http_headers': {
+        'User-Agent': 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 '
+                      '(KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
+    },
+}
+
+# Сообщение об ошибке yt-dlp приводим к виду, понятному пользователю.
+def friendly_error(msg: str) -> str:
+    s = str(msg)
+    low = s.lower()
+    if 'sign in to confirm' in low or 'login_required' in low:
+        return ('YouTube требует вход в аккаунт для этого видео '
+                '(возрастное/региональное ограничение или бот-защита). '
+                'Обновите cookies через /admin — текущие устарели или Google их сбросил.')
+    if 'private video' in low:
+        return 'Это приватное видео, к нему нет доступа.'
+    if 'video unavailable' in low:
+        return 'Видео недоступно (удалено или заблокировано в вашем регионе).'
+    return s
+
 def get_global_cookies():
     if COOKIES_FILE.exists():
         return str(COOKIES_FILE)
@@ -47,11 +80,10 @@ def do_download(task_id, url, password, format_id=None):
     fmt = format_id if format_id else 'bestvideo+bestaudio/best'
 
     ydl_opts = {
+        **COMMON_YDL_OPTS,
         'outtmpl': str(out_dir / '%(title)s.%(ext)s'),
         'format': fmt,
         'merge_output_format': 'mp4',
-        'quiet': True,
-        'no_warnings': True,
         'progress_hooks': [lambda d: progress_hook(task_id, d)],
     }
     if password:
@@ -75,7 +107,8 @@ def do_download(task_id, url, password, format_id=None):
                 files.append({'id':fid,'name':f.name})
         task.update({'status':'done','progress':100,'stage':'Готово!','files':files,'log_line':f'Скачано: {len(files)} файл(ов)'})
     except Exception as e:
-        task.update({'status':'error','error':str(e),'log_line':f'Ошибка: {e}'})
+        err = friendly_error(e)
+        task.update({'status':'error','error':err,'log_line':f'Ошибка: {err}'})
 
 def progress_hook(task_id, d):
     task = tasks.get(task_id)
@@ -103,8 +136,7 @@ def get_formats():
         return jsonify({'error': 'URL обязателен'}), 400
 
     ydl_opts = {
-        'quiet': True,
-        'no_warnings': True,
+        **COMMON_YDL_OPTS,
         'skip_download': True,
     }
     cookies = get_global_cookies()
@@ -157,7 +189,7 @@ def get_formats():
 
             return jsonify({'title': title, 'formats': formats[:15]})
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return jsonify({'error': friendly_error(e)}), 500
 
 @app.route('/api/admin/upload-cookies', methods=['POST'])
 def upload_cookies():
