@@ -30,7 +30,7 @@ def do_download(task_id, url, password):
     out_dir.mkdir(exist_ok=True)
     ydl_opts = {
         'outtmpl': str(out_dir / '%(title)s.%(ext)s'),
-        'format': 'bestvideo+bestaudio/best/bestvideo/bestaudio',
+        'format': 'best[ext=mp4]/best',
         'merge_output_format': 'mp4',
         'quiet': True,
         'no_warnings': True,
