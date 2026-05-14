@@ -1,1 +1,0 @@
-kobik write test
