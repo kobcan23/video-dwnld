@@ -50,8 +50,8 @@ def do_download(task_id, url, password, format_id=None):
             task['log_line'] = f'Найдено: {info.get("title","Без названия")}'
             task.update({'progress':30,'stage':'Скачивание...'})
             if task.get('cancelled'):
-            raise Exception('Отменено пользователем')
-        ydl.download([url])
+                raise Exception('Отменено пользователем')
+            ydl.download([url])
         files = []
         for f in out_dir.iterdir():
             if f.is_file():
