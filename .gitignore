@@ -1,0 +1,18 @@
+# Локальный environment
+.env
+.env.local
+
+# Бэкапы при ручных правках
+*.bak
+*.bak.*
+
+# Локальные настройки развёртывания (зависят от хоста)
+Caddyfile
+Caddyfile.bak.ip
+Caddyfile.domain
+docker-compose.yml
+
+# Runtime data
+data/
+downloads/
+cookies/

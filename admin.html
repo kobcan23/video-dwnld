@@ -9,7 +9,7 @@
 :root{--bg:#0a0a0f;--surface:#111118;--border:#1e1e2e;--accent:#7c3aed;--text:#e2e8f0;--muted:#64748b;--success:#22d3a0;--error:#ff4d6d}
 *{margin:0;padding:0;box-sizing:border-box}
 body{background:var(--bg);color:var(--text);font-family:'Syne',sans-serif;min-height:100vh;display:flex;align-items:center;justify-content:center}
-.wrapper{width:100%;max-width:500px;padding:24px;z-index:1}
+.wrapper{width:100%;max-width:900px;padding:24px;z-index:1}
 h1{font-size:28px;font-weight:800;margin-bottom:6px}
 h1 span{color:var(--accent)}
 .sub{color:var(--muted);font-size:13px;font-family:'JetBrains Mono',monospace;margin-bottom:32px}
@@ -28,6 +28,24 @@ input::placeholder{color:var(--muted);opacity:.6}
 .btn:disabled{opacity:.4;cursor:not-allowed}
 .status{margin-top:16px;padding:14px 16px;border-radius:10px;font-family:'JetBrains Mono',monospace;font-size:12px;display:none}
 .status.ok{background:rgba(34,211,160,.08);border:1px solid rgba(34,211,160,.2);color:var(--success)}
+.tbl-wrap{overflow-x:auto;margin-top:8px}
+table.hist{width:100%;border-collapse:collapse;font-family:'JetBrains Mono',monospace;font-size:12px}
+table.hist th,table.hist td{padding:8px 10px;text-align:left;border-bottom:1px solid var(--border);vertical-align:top}
+table.hist th{color:var(--muted);font-size:10px;letter-spacing:.1em;text-transform:uppercase;font-weight:700;background:rgba(255,255,255,.02)}
+table.hist td.title{max-width:340px;word-break:break-word;color:var(--text)}
+table.hist td.url{max-width:240px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--muted)}
+table.hist td.url a{color:var(--muted);text-decoration:none}
+table.hist td.url a:hover{color:var(--accent)}
+table.hist tr:hover td{background:rgba(255,255,255,.02)}
+.badge{display:inline-block;padding:2px 8px;border-radius:6px;font-size:10px;font-weight:700;letter-spacing:.05em;text-transform:uppercase}
+.badge.done{background:rgba(34,211,160,.12);color:var(--success)}
+.badge.error{background:rgba(255,77,109,.12);color:var(--error)}
+.badge.src{background:rgba(124,58,237,.12);color:var(--accent)}
+.hist-empty{padding:24px;text-align:center;color:var(--muted);font-family:'JetBrains Mono',monospace;font-size:12px}
+.hist-btn{background:transparent;color:var(--muted);border:1px solid var(--border);border-radius:8px;padding:6px 12px;font-family:'JetBrains Mono',monospace;font-size:11px;cursor:pointer;transition:all .15s}
+.hist-btn:hover{color:var(--accent);border-color:var(--accent)}
+.hist-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:14px}
+.hist-title{font-family:'Syne',sans-serif;font-weight:800;font-size:18px}
 .status.err{background:rgba(255,77,109,.08);border:1px solid rgba(255,77,109,.2);color:var(--error)}
 .status.visible{display:block}
 .info-box{background:rgba(124,58,237,.06);border:1px solid rgba(124,58,237,.2);border-radius:10px;padding:14px 16px;font-size:12px;font-family:'JetBrains Mono',monospace;color:rgba(124,58,237,.9);line-height:1.7;margin-bottom:14px}
@@ -63,6 +81,29 @@ input::placeholder{color:var(--muted);opacity:.6}
 
     <button class="btn" onclick="uploadCookies()" id="uploadBtn">⬆ Загрузить куки</button>
     <div class="status" id="statusBox"></div>
+  </div>
+
+  <div class="card">
+    <div class="hist-header">
+      <div class="hist-title">История скачиваний</div>
+      <button class="hist-btn" onclick="loadHistory()">↻ Обновить</button>
+    </div>
+    <div class="tbl-wrap">
+      <table class="hist" id="histTable">
+        <thead>
+          <tr>
+            <th>Время</th>
+            <th>Название</th>
+            <th>URL</th>
+            <th>Источник</th>
+            <th>Статус</th>
+          </tr>
+        </thead>
+        <tbody id="histBody">
+          <tr><td colspan="5" class="hist-empty">Введите пароль выше — и история загрузится автоматически</td></tr>
+        </tbody>
+      </table>
+    </div>
   </div>
 
   <div style="text-align:center;margin-top:16px">
@@ -129,6 +170,45 @@ function showStatus(msg,type){
 }
 
 document.getElementById('adminPass').addEventListener('blur',checkStatus);
+document.getElementById('adminPass').addEventListener('blur',loadHistory);
+
+function fmtTime(ts){
+  const d=new Date(ts*1000);
+  const p=n=>String(n).padStart(2,'0');
+  return `${p(d.getDate())}.${p(d.getMonth()+1)} ${p(d.getHours())}:${p(d.getMinutes())}`;
+}
+
+function escapeHtml(s){
+  return String(s||'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;','\'':'&#39;'}[c]));
+}
+
+async function loadHistory(){
+  const pass=document.getElementById('adminPass').value;
+  const body=document.getElementById('histBody');
+  if(!pass){body.innerHTML='<tr><td colspan="5" class="hist-empty">Введите пароль выше</td></tr>';return}
+  try{
+    const res=await fetch(`/api/admin/history?password=${encodeURIComponent(pass)}&limit=200`);
+    const data=await res.json();
+    if(data.error){body.innerHTML=`<tr><td colspan="5" class="hist-empty">❌ ${escapeHtml(data.error)}</td></tr>`;return}
+    if(!data.items||!data.items.length){body.innerHTML='<tr><td colspan="5" class="hist-empty">Скачиваний пока нет</td></tr>';return}
+    body.innerHTML=data.items.map(it=>{
+      const title=it.title||(it.files&&it.files[0])||'—';
+      const statusBadge=it.status==='done'
+        ?'<span class="badge done">✓ Готово</span>'
+        :`<span class="badge error" title="${escapeHtml(it.error||'')}">✗ Ошибка</span>`;
+      const urlShort=(it.url||'').replace(/^https?:\/\//,'').slice(0,60);
+      return `<tr>
+        <td>${fmtTime(it.ts)}</td>
+        <td class="title">${escapeHtml(title)}</td>
+        <td class="url"><a href="${escapeHtml(it.url)}" target="_blank" rel="noopener">${escapeHtml(urlShort)}</a></td>
+        <td><span class="badge src">${escapeHtml(it.source||'?')}</span></td>
+        <td>${statusBadge}</td>
+      </tr>`;
+    }).join('');
+  }catch(e){
+    body.innerHTML=`<tr><td colspan="5" class="hist-empty">Ошибка загрузки: ${escapeHtml(e.message)}</td></tr>`;
+  }
+}
 </script>
 </body>
 </html>

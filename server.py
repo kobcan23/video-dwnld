@@ -11,6 +11,9 @@ CORS(app)
 
 DOWNLOAD_DIR = Path(__file__).parent / "downloads"
 DOWNLOAD_DIR.mkdir(exist_ok=True)
+HISTORY_FILE = Path(__file__).parent / "data" / "history.jsonl"
+HISTORY_FILE.parent.mkdir(exist_ok=True)
+HISTORY_LOCK = threading.Lock()
 COOKIES_DIR = Path(__file__).parent / "cookies"
 COOKIES_DIR.mkdir(exist_ok=True)
 
@@ -38,15 +41,22 @@ tasks = {}
 #   — deno как JS runtime (иначе часть экстракторов отключена)
 #   — различные player clients (web,mweb,tv выживают в разных ситуациях)
 #   — user-agent обычного браузера
+#   — PO-токены через bgutil-pot-provider (если POT_PROVIDER_URL задан)
+_pot_url = os.environ.get('POT_PROVIDER_URL', '').strip()
+_youtube_extractor_args = {
+    'player_client': ['default', 'web', 'mweb', 'tv'],
+}
+_extractor_args = {'youtube': _youtube_extractor_args}
+if _pot_url:
+    # bgutil-ytdlp-pot-provider читает base_url из extractor-args
+    # ключа youtubepot-bgutilhttp.
+    _extractor_args['youtubepot-bgutilhttp'] = {'base_url': [_pot_url]}
+
 COMMON_YDL_OPTS = {
     'quiet': True,
     'no_warnings': True,
     'js_runtimes': {'deno': {'path': 'deno'}},
-    'extractor_args': {
-        'youtube': {
-            'player_client': ['default', 'web', 'mweb', 'tv'],
-        },
-    },
+    'extractor_args': _extractor_args,
     'http_headers': {
         'User-Agent': 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 '
                       '(KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
@@ -71,6 +81,49 @@ def get_global_cookies():
     if COOKIES_FILE.exists():
         return str(COOKIES_FILE)
     return None
+
+# ─── История скачиваний ──────────────────────────────────────
+# Пишем каждое завершённое скачивание в JSONL-файл. Объём на один
+import time as _time
+
+def _log_history(task_id, url, source, status, title=None, files=None, error=None, format_id=None):
+    """Дописываем запись в history.jsonl. Безопасно к ошибкам — история не должна ронять скачивание."""
+    try:
+        rec = {
+            'ts': int(_time.time()),
+            'task_id': task_id,
+            'url': url,
+            'source': source,  # piped|invidious|yt-dlp
+            'status': status,  # done|error
+            'title': title,
+            'format_id': format_id,
+            'files': [f.get('name') for f in (files or []) if f.get('name')],
+            'error': error,
+        }
+        with HISTORY_LOCK:
+            with HISTORY_FILE.open('a', encoding='utf-8') as fh:
+                fh.write(json.dumps(rec, ensure_ascii=False) + '\n')
+    except Exception as e:
+        print(f"[history] failed to log: {e}")
+
+def _read_history(limit=200):
+    """Читаем последние N записей (от новых к старым). Простой tail — для файла до ~50 MB хватит."""
+    if not HISTORY_FILE.exists():
+        return []
+    try:
+        with HISTORY_LOCK:
+            with HISTORY_FILE.open('r', encoding='utf-8') as fh:
+                lines = fh.readlines()
+        out = []
+        for line in reversed(lines[-limit:]):
+            try:
+                out.append(json.loads(line))
+            except Exception:
+                continue
+        return out
+    except Exception as e:
+        print(f"[history] failed to read: {e}")
+        return []
 
 # ─── Piped (публичные прокси YouTube) ───────────────────────────────────────
 # Для YouTube используем Piped как основной источник: он работает через свои
@@ -249,6 +302,7 @@ def piped_download(task_id: str, video_id: str, format_id: str, out_dir: Path):
     task.update({'progress': 25, 'stage': 'Получение информации (Piped)...', 'log_line': f'Piped: {video_id}'})
     streams = piped_get_streams(video_id)
     title = streams.get('title') or video_id
+    task['title'] = title
     safe = re.sub(r'[^A-Za-z0-9А-Яа-яЁё._\- ]', '_', title)[:120].strip() or video_id
     task['log_line'] = f'Найдено: {title}'
 
@@ -534,6 +588,7 @@ def invidious_download(task_id: str, video_id: str, format_id: str, out_dir: Pat
     task.update({'progress': 25, 'stage': 'Получение информации (Invidious)...', 'log_line': f'Invidious: {video_id}'})
     video = invidious_get_video(video_id)
     title = video.get('title') or video_id
+    task['title'] = title
     safe = re.sub(r'[^A-Za-z0-9А-Яа-яЁё._\- ]', '_', title)[:120].strip() or video_id
     task['log_line'] = f"Найдено (Invidious): {title}"
 
@@ -672,6 +727,7 @@ def do_download(task_id, url, password, format_id=None):
                     tasks[task_id].setdefault('file_map',{})[fid] = str(f)
                     files.append({'id':fid,'name':f.name})
             task.update({'status':'done','progress':100,'stage':'Готово!','files':files,'log_line':f'Скачано: {len(files)} файл(ов) через Piped'})
+            _log_history(task_id, url, 'piped', 'done', title=task.get('title'), files=files, format_id=format_id)
             return
         except Exception as e:
             print(f"[piped] failed, fallback to invidious: {e}")
@@ -694,6 +750,7 @@ def do_download(task_id, url, password, format_id=None):
                     tasks[task_id].setdefault('file_map',{})[fid] = str(f)
                     files.append({'id':fid,'name':f.name})
             task.update({'status':'done','progress':100,'stage':'Готово!','files':files,'log_line':f'Скачано: {len(files)} файл(ов) через Invidious'})
+            _log_history(task_id, url, 'invidious', 'done', title=task.get('title'), files=files, format_id=format_id)
             return
         except Exception as e:
             print(f"[invidious] failed, fallback to yt-dlp: {e}")
@@ -720,6 +777,7 @@ def do_download(task_id, url, password, format_id=None):
     try:
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             info = ydl.extract_info(url, download=False)
+            task['title'] = info.get("title", "Без названия")
             task['log_line'] = f'Найдено: {info.get("title","Без названия")}'
             task.update({'progress':30,'stage':'Скачивание...'})
             if task.get('cancelled'):
@@ -732,9 +790,11 @@ def do_download(task_id, url, password, format_id=None):
                 tasks[task_id].setdefault('file_map',{})[fid] = str(f)
                 files.append({'id':fid,'name':f.name})
         task.update({'status':'done','progress':100,'stage':'Готово!','files':files,'log_line':f'Скачано: {len(files)} файл(ов)'})
+        _log_history(task_id, url, 'yt-dlp', 'done', title=task.get('title'), files=files, format_id=format_id)
     except Exception as e:
         err = friendly_error(e)
         task.update({'status':'error','error':err,'log_line':f'Ошибка: {err}'})
+        _log_history(task_id, url, 'yt-dlp', 'error', title=task.get('title'), error=err, format_id=format_id)
 
 def progress_hook(task_id, d):
     task = tasks.get(task_id)
@@ -865,6 +925,18 @@ def cookies_status():
         dt = datetime.datetime.fromtimestamp(mtime).strftime('%d.%m.%Y %H:%M')
         return jsonify({'exists': True, 'size': size, 'updated': dt})
     return jsonify({'exists': False})
+
+@app.route('/api/admin/history')
+def admin_history():
+    password = request.args.get('password', '')
+    if password != ADMIN_PASSWORD:
+        return jsonify({'error': 'Неверный пароль'}), 403
+    try:
+        limit = int(request.args.get('limit', '200'))
+    except ValueError:
+        limit = 200
+    limit = max(1, min(limit, 1000))
+    return jsonify({'items': _read_history(limit=limit)})
 
 @app.route('/api/download', methods=['POST'])
 def start_download():

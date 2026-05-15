@@ -22,6 +22,11 @@ RUN pip install --no-cache-dir flask flask-cors && \
     pip install --no-cache-dir --pre "yt-dlp[default]" && \
     yt-dlp --version
 
+# bgutil-ytdlp-pot-provider — плагин для yt-dlp, ходит за PO-токенами
+# в наш отдельный pot-provider-контейнер. С PO-токеном YouTube перестаёт
+# требовать капчу/логин для большинства видео (но не для 18+).
+RUN pip install --no-cache-dir bgutil-ytdlp-pot-provider
+
 COPY server.py .
 COPY zoom-downloader.html .
 COPY admin.html .
