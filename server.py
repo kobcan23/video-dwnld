@@ -815,6 +815,46 @@ def index():
 def admin():
     return send_file(Path(__file__).parent / 'admin.html')
 
+@app.route('/healthz')
+def healthz():
+    """Проба живости для cron-ватчера.
+    Возвращает 200 только если:
+      - полный cycle yt_dlp импортировался
+      - есть хотя бы один живой Piped-инстанс
+      - download директория доступна на запись
+    Иначе 503 — пусть мониторинг бьёт тревогу.
+    Без пароля, но без чувствительных данных.
+    """
+    checks = {'yt_dlp': False, 'storage': False, 'piped': False, 'pot_provider': None}
+    # 1) yt-dlp
+    try:
+        checks['yt_dlp'] = bool(yt_dlp.version.__version__)
+    except Exception:
+        pass
+    # 2) писалка в директорию загрузок
+    try:
+        probe = DOWNLOAD_DIR / '.healthz'
+        probe.write_text('ok', encoding='utf-8')
+        probe.unlink()
+        checks['storage'] = True
+    except Exception:
+        pass
+    # 3) Piped — берём из кэша, не ходим в сеть (иначе healthz будет тяжёлым)
+    try:
+        checks['piped'] = bool(PIPED_INSTANCES_FALLBACK)
+    except NameError:
+        pass
+    # 4) pot-provider — пинг с таймаутом 2c
+    if _pot_url:
+        try:
+            req = urllib.request.Request(_pot_url.rstrip('/') + '/ping')
+            with urllib.request.urlopen(req, timeout=2) as r:
+                checks['pot_provider'] = (r.status == 200)
+        except Exception:
+            checks['pot_provider'] = False
+    ok = checks['yt_dlp'] and checks['storage'] and checks['piped']
+    return jsonify({'ok': ok, 'checks': checks}), (200 if ok else 503)
+
 @app.route('/api/formats', methods=['POST'])
 def get_formats():
     url = (request.json.get('url') or '').strip()
