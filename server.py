@@ -58,9 +58,9 @@ def friendly_error(msg: str) -> str:
     s = str(msg)
     low = s.lower()
     if 'sign in to confirm' in low or 'login_required' in low:
-        return ('YouTube требует вход в аккаунт для этого видео '
-                '(возрастное/региональное ограничение или бот-защита). '
-                'Обновите cookies через /admin — текущие устарели или Google их сбросил.')
+        return ('YouTube сейчас не отдаёт это видео анонимно (защита от ботов '
+                'или возрастное/региональное ограничение). Попробуйте через 5–10 '
+                'минут — мы автоматически перебираем несколько публичных прокси.')
     if 'private video' in low:
         return 'Это приватное видео, к нему нет доступа.'
     if 'video unavailable' in low:
@@ -80,12 +80,21 @@ def get_global_cookies():
 # Список Piped-инстансов меняется со временем, поэтому держим хард-кодед
 # fallback + пытаемся подгрузить актуальный список с piped-instances.kavin.rocks.
 
+# Список регулярно обновляем (см. https://github.com/TeamPiped/Piped/wiki/Instances).
+# Проверка 2026-05-15: живы api.piped.private.coffee и api.piped.projectsegfau.lt,
+# остальные либо лежат, либо отвечают редиректом на сайт.
 PIPED_INSTANCES_FALLBACK = [
     "https://api.piped.private.coffee",
+    "https://api.piped.projectsegfau.lt",
     "https://pipedapi.kavin.rocks",
     "https://pipedapi.adminforge.de",
     "https://pipedapi.r4fo.com",
     "https://api.piped.yt",
+    "https://pipedapi.leptons.xyz",
+    "https://pipedapi.smnz.de",
+    "https://pipedapi.ducks.party",
+    "https://pipedapi.drgns.space",
+    "https://pipedapi.darkness.services",
 ]
 
 _piped_instances_cache = {'list': None, 'fetched_at': 0}
@@ -370,15 +379,290 @@ def _piped_fetch(task: dict, url: str, dest: Path, label: str = '',
 
 # ─── /Piped ─────────────────────────────────────────────────────────────────
 
+# ─── Invidious (второй слой fallback) ───────────────────────────────────────
+# Если все Piped-инстансы легли — пробуем Invidious. Он тоже проксирует YouTube
+# без куков, используя флаг ?local=true (отдаёт URL'ы вида https://<instance>/videoplayback?...).
+# Некоторые инстансы (f5.si) блокируют Mozilla-UA через Anubis PoW — ходим с пустым UA.
+
+INVIDIOUS_INSTANCES_FALLBACK = [
+    "https://invidious.f5.si",
+    "https://invidious.projectsegfau.lt",
+    "https://invidious.nerdvpn.de",
+    "https://yewtu.be",
+    "https://invidious.private.coffee",
+    "https://invidious.materialio.us",
+    "https://inv.tux.pizza",
+    "https://invidious.adminforge.de",
+]
+
+_invidious_instances_cache = {'list': None, 'fetched_at': 0}
+
+def _invidious_instances():
+    """Список Invidious API URL. Динамически обновляем раз в час через api.invidious.io."""
+    import time
+    now = time.time()
+    if _invidious_instances_cache['list'] and now - _invidious_instances_cache['fetched_at'] < 3600:
+        return _invidious_instances_cache['list']
+    instances = []
+    try:
+        req = urllib.request.Request(
+            "https://api.invidious.io/instances.json?sort_by=health",
+            headers={'User-Agent': 'video-dwnld/1.0'},
+        )
+        with urllib.request.urlopen(req, timeout=5) as resp:
+            data = json.loads(resp.read().decode('utf-8'))
+            for host, info in data:
+                if info.get('api') and info.get('type') == 'https' and info.get('uri'):
+                    instances.append(info['uri'].rstrip('/'))
+    except Exception as e:
+        print(f"[invidious] не удалось получить список инстансов: {e}")
+    seen = set()
+    merged = []
+    for u in instances + INVIDIOUS_INSTANCES_FALLBACK:
+        if u not in seen:
+            seen.add(u)
+            merged.append(u)
+    _invidious_instances_cache['list'] = merged
+    _invidious_instances_cache['fetched_at'] = now
+    return merged
+
+def invidious_get_video(video_id: str):
+    """Опросить Invidious-инстансы, вернуть первый успешный JSON с полями title/formats.
+
+    Все URL в ответе будут проксированы через этот же инстанс (?local=true).
+    """
+    last_err = None
+    for base in _invidious_instances():
+        try:
+            req = urllib.request.Request(
+                f"{base}/api/v1/videos/{video_id}?fields=title,adaptiveFormats,formatStreams&local=true",
+                headers={'User-Agent': ''},  # пустой UA обходит Anubis на f5.si
+            )
+            with urllib.request.urlopen(req, timeout=8) as resp:
+                if resp.status != 200:
+                    last_err = f"{base} → HTTP {resp.status}"
+                    continue
+                raw = resp.read()
+                if not raw or raw[:1] != b'{':
+                    last_err = f"{base} → ответ не JSON ({len(raw)} bytes)"
+                    continue
+                data = json.loads(raw.decode('utf-8'))
+                if data.get('error') or not (data.get('adaptiveFormats') or data.get('formatStreams')):
+                    last_err = f"{base} → {data.get('error', 'no formats')}"
+                    continue
+                data['_invidious_instance'] = base
+                return data
+        except Exception as e:
+            last_err = f"{base} → {e}"
+            continue
+    raise RuntimeError(f"Все Invidious-инстансы недоступны. Последняя ошибка: {last_err}")
+
+def invidious_formats_list(video: dict):
+    """Превращает ответ Invidious в наш формат списка форматов."""
+    formats = []
+    seen_dash = set()
+    seen_prog = set()
+    # adaptive (DASH — видео и аудио раздельно)
+    for f in video.get('adaptiveFormats') or []:
+        t = (f.get('type') or '').lower()
+        if 'video/mp4' not in t:
+            continue
+        ql = f.get('qualityLabel') or ''
+        try:
+            h = int(ql.rstrip('p')) if ql else 0
+        except ValueError:
+            h = 0
+        if not h or h in seen_dash:
+            continue
+        seen_dash.add(h)
+        size = f.get('clen') or f.get('contentLength')
+        try:
+            size_mb = round(int(size) / 1024 / 1024) if size else None
+        except Exception:
+            size_mb = None
+        formats.append({
+            'id': f'inv:dash:{h}:mp4',
+            'label': f"{h}p MP4" + (f" ~{size_mb}MB" if size_mb else ''),
+            'height': h,
+            'ext': 'mp4',
+        })
+    # progressive (видео+аудио вместе — обычно только 360p)
+    for f in video.get('formatStreams') or []:
+        ql = f.get('qualityLabel') or ''
+        try:
+            h = int(ql.rstrip('p')) if ql else 0
+        except ValueError:
+            h = 0
+        ext = (f.get('container') or 'mp4').lower()
+        key = (h, ext)
+        if key in seen_prog:
+            continue
+        seen_prog.add(key)
+        formats.append({
+            'id': f'inv:prog:{h}:{ext}',
+            'label': f"{h}p {ext.upper()} (без сборки)",
+            'height': h,
+            'ext': ext,
+        })
+    # audio only — лучший m4a
+    audio_best_br = 0
+    for f in video.get('adaptiveFormats') or []:
+        t = (f.get('type') or '').lower()
+        if 'audio/mp4' not in t:
+            continue
+        try:
+            br = int(f.get('bitrate') or 0)
+        except Exception:
+            br = 0
+        if br > audio_best_br:
+            audio_best_br = br
+    if audio_best_br:
+        formats.append({
+            'id': 'inv:audio:m4a',
+            'label': 'Только аудио M4A',
+            'height': 0,
+            'ext': 'm4a',
+        })
+    formats.sort(key=lambda x: (x['height'] == 0, -x['height']))
+    return formats
+
+def invidious_download(task_id: str, video_id: str, format_id: str, out_dir: Path):
+    """Скачивает видео через Invidious. Форматы: 'inv:prog:<h>:<ext>', 'inv:dash:<h>:mp4', 'inv:audio:m4a'.
+    Пустой format_id → лучший mp4 ≤1080p (DASH).
+    """
+    task = tasks[task_id]
+    task.update({'progress': 25, 'stage': 'Получение информации (Invidious)...', 'log_line': f'Invidious: {video_id}'})
+    video = invidious_get_video(video_id)
+    title = video.get('title') or video_id
+    safe = re.sub(r'[^A-Za-z0-9А-Яа-яЁё._\- ]', '_', title)[:120].strip() or video_id
+    task['log_line'] = f"Найдено (Invidious): {title}"
+
+    adaptive = video.get('adaptiveFormats') or []
+    progressive = video.get('formatStreams') or []
+
+    if not format_id:
+        plan = ('dash', 1080, 'mp4')
+    elif format_id.startswith('inv:'):
+        parts = format_id.split(':')
+        kind = parts[1]
+        if kind == 'audio':
+            plan = ('audio', 0, 'm4a')
+        elif kind == 'prog':
+            plan = ('prog', int(parts[2]), parts[3])
+        else:
+            plan = ('dash', int(parts[2]), 'mp4')
+    else:
+        plan = ('dash', 1080, 'mp4')
+
+    kind, want_h, ext = plan
+
+    def _h(f):
+        try:
+            return int(str(f.get('qualityLabel', '0p')).rstrip('p') or 0)
+        except ValueError:
+            return 0
+
+    if kind == 'audio':
+        a_audio = [f for f in adaptive if 'audio/mp4' in (f.get('type') or '').lower()]
+        if not a_audio:
+            raise RuntimeError('Нет аудиопотока (Invidious).')
+        a_best = max(a_audio, key=lambda f: f.get('bitrate', 0) or 0)
+        out = out_dir / f"{safe}.m4a"
+        _invidious_fetch(task, a_best['url'], out, label='аудио')
+        return [out]
+
+    if kind == 'prog':
+        cand = [f for f in progressive if (f.get('container') or 'mp4').lower() == ext]
+        cand.sort(key=_h, reverse=True)
+        match = next((f for f in cand if _h(f) <= want_h), cand[0] if cand else None)
+        if not match:
+            raise RuntimeError('Нет progressive-формата (Invidious).')
+        out = out_dir / f"{safe}.{ext}"
+        _invidious_fetch(task, match['url'], out, label=f"{want_h}p")
+        return [out]
+
+    # DASH
+    only_v = [f for f in adaptive if 'video/mp4' in (f.get('type') or '').lower()]
+    only_v.sort(key=_h, reverse=True)
+    vmatch = next((f for f in only_v if _h(f) <= want_h), only_v[-1] if only_v else None)
+    if not vmatch:
+        raise RuntimeError('Нет видеопотока (Invidious).')
+    only_a = [f for f in adaptive if 'audio/mp4' in (f.get('type') or '').lower()]
+    if not only_a:
+        raise RuntimeError('Нет аудиопотока (Invidious).')
+    amatch = max(only_a, key=lambda f: f.get('bitrate', 0) or 0)
+
+    tmp_v = out_dir / "_video.tmp"
+    tmp_a = out_dir / "_audio.tmp"
+    out = out_dir / f"{safe}.mp4"
+
+    task.update({'progress': 35, 'stage': f"Скачивание видео {_h(vmatch)}p (Invidious)...", 'log_line': f"video stream {_h(vmatch)}p"})
+    _invidious_fetch(task, vmatch['url'], tmp_v, label=f"видео {_h(vmatch)}p", progress_base=35, progress_span=40)
+
+    task.update({'progress': 75, 'stage': 'Скачивание аудио (Invidious)...', 'log_line': 'audio stream'})
+    _invidious_fetch(task, amatch['url'], tmp_a, label="аудио", progress_base=75, progress_span=15)
+
+    task.update({'progress': 92, 'stage': 'Сборка файла...', 'log_line': 'ffmpeg merge'})
+    proc = subprocess.run(
+        ['ffmpeg', '-y', '-i', str(tmp_v), '-i', str(tmp_a),
+         '-c', 'copy', '-movflags', '+faststart', str(out)],
+        capture_output=True, text=True
+    )
+    if proc.returncode != 0:
+        proc = subprocess.run(
+            ['ffmpeg', '-y', '-i', str(tmp_v), '-i', str(tmp_a),
+             '-c:v', 'copy', '-c:a', 'aac', '-movflags', '+faststart', str(out)],
+            capture_output=True, text=True
+        )
+        if proc.returncode != 0:
+            raise RuntimeError(f"ffmpeg merge failed: {proc.stderr[-400:]}")
+
+    try:
+        tmp_v.unlink(missing_ok=True)
+        tmp_a.unlink(missing_ok=True)
+    except Exception:
+        pass
+
+    return [out]
+
+def _invidious_fetch(task: dict, url: str, dest: Path, label: str = '',
+                     progress_base: int = 30, progress_span: int = 50):
+    """Скачивает url (возможно относительный) в dest с прогрессом. Пустой UA (Anubis bypass)."""
+    if url.startswith('/'):
+        cached = _invidious_instances_cache.get('list') or INVIDIOUS_INSTANCES_FALLBACK
+        url = cached[0] + url
+    req = urllib.request.Request(url, headers={'User-Agent': ''})
+    with urllib.request.urlopen(req, timeout=30) as resp:
+        total = int(resp.headers.get('Content-Length') or 0)
+        got = 0
+        with open(dest, 'wb') as f:
+            while True:
+                if task.get('cancelled'):
+                    raise Exception('Отменено пользователем')
+                chunk = resp.read(64 * 1024)
+                if not chunk:
+                    break
+                f.write(chunk)
+                got += len(chunk)
+                if total:
+                    pct = got / total
+                    task['progress'] = int(progress_base + pct * progress_span)
+                    task['log_line'] = f"{label}: {got//1024//1024} MB / {total//1024//1024} MB"
+                else:
+                    task['log_line'] = f"{label}: {got//1024//1024} MB"
+
+# ─── /Invidious ─────────────────────────────────────────────────────────────
+
 def do_download(task_id, url, password, format_id=None):
     task = tasks[task_id]
     task.update({'status':'running','progress':20,'stage':'Получение информации...','log_line':f'Обработка: {url}'})
     out_dir = DOWNLOAD_DIR / task_id
     out_dir.mkdir(exist_ok=True)
 
-    # YouTube ссылки качаем через Piped — стабильнее, не нужны cookies.
+    # YouTube ссылки: Piped → Invidious → yt-dlp (трёхслойный fallback).
     yt_id = extract_youtube_id(url)
     if yt_id:
+        # 1) Piped
         try:
             files_paths = piped_download(task_id, yt_id, format_id or '', out_dir)
             files = []
@@ -387,15 +671,39 @@ def do_download(task_id, url, password, format_id=None):
                     fid = str(uuid.uuid4())
                     tasks[task_id].setdefault('file_map',{})[fid] = str(f)
                     files.append({'id':fid,'name':f.name})
-            task.update({'status':'done','progress':100,'stage':'Готово!','files':files,'log_line':f'Скачано: {len(files)} файл(ов)'})
+            task.update({'status':'done','progress':100,'stage':'Готово!','files':files,'log_line':f'Скачано: {len(files)} файл(ов) через Piped'})
             return
         except Exception as e:
-            # Если Piped упал — пробуем yt-dlp как fallback (с куками).
-            print(f"[piped] failed, fallback to yt-dlp: {e}")
-            task['log_line'] = f"Piped не сработал ({e}); пробую yt-dlp..."
+            print(f"[piped] failed, fallback to invidious: {e}")
+            task['log_line'] = f"Piped не сработал ({e}); пробую Invidious..."
+            # Подчистим частичные файлы от Piped
+            for stale in out_dir.glob('*'):
+                try: stale.unlink()
+                except Exception: pass
+
+        # 2) Invidious. Если выбран формат с префиксом piped: — перемапим на inv:
+        inv_format = format_id or ''
+        if inv_format.startswith('piped:'):
+            inv_format = 'inv:' + inv_format[len('piped:'):]
+        try:
+            files_paths = invidious_download(task_id, yt_id, inv_format, out_dir)
+            files = []
+            for f in files_paths:
+                if f.is_file():
+                    fid = str(uuid.uuid4())
+                    tasks[task_id].setdefault('file_map',{})[fid] = str(f)
+                    files.append({'id':fid,'name':f.name})
+            task.update({'status':'done','progress':100,'stage':'Готово!','files':files,'log_line':f'Скачано: {len(files)} файл(ов) через Invidious'})
+            return
+        except Exception as e:
+            print(f"[invidious] failed, fallback to yt-dlp: {e}")
+            task['log_line'] = f"Invidious тоже не сработал ({e}); пробую yt-dlp..."
+            for stale in out_dir.glob('*'):
+                try: stale.unlink()
+                except Exception: pass
 
     # Не YouTube или Piped не справился — стандартный yt-dlp путь.
-    fmt = format_id if (format_id and not format_id.startswith('piped:')) else 'bestvideo+bestaudio/best'
+    fmt = format_id if (format_id and not format_id.startswith(('piped:', 'inv:'))) else 'bestvideo+bestaudio/best'
 
     ydl_opts = {
         **COMMON_YDL_OPTS,
@@ -453,7 +761,7 @@ def get_formats():
     if not url:
         return jsonify({'error': 'URL обязателен'}), 400
 
-    # YouTube → Piped (без куков, обходит бот-защиту).
+    # YouTube → Piped → Invidious → yt-dlp (без куков, обходит бот-защиту).
     yt_id = extract_youtube_id(url)
     if yt_id:
         try:
@@ -464,7 +772,16 @@ def get_formats():
                 'source': 'piped',
             })
         except Exception as e:
-            print(f"[piped /api/formats] {e}; fallback to yt-dlp")
+            print(f"[piped /api/formats] {e}; fallback to invidious")
+        try:
+            video = invidious_get_video(yt_id)
+            return jsonify({
+                'title': video.get('title') or 'YouTube видео',
+                'formats': invidious_formats_list(video)[:15],
+                'source': 'invidious',
+            })
+        except Exception as e:
+            print(f"[invidious /api/formats] {e}; fallback to yt-dlp")
             # дальше — yt-dlp как fallback
 
     ydl_opts = {
